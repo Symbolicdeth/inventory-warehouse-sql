@@ -11,10 +11,15 @@ Conceptos SQL usados aquí:
 from database import get_connection
 
 
-def record_movement(product_name, movement_type, quantity, note=""):
+def record_movement(product_name, movement_type, quantity, note="",
+                     supplier=None, po_number=None, batch_lot=None, expiry_date=None):
     """
     Registra un movimiento de stock (IN o OUT) y actualiza el stock del producto.
     Usa una transacción: si algo falla, no se aplica ningún cambio.
+
+    Los campos supplier, po_number, batch_lot y expiry_date son opcionales y
+    pensados principalmente para movimientos IN (recepción de mercadería /
+    "goods in"), replicando los datos que hoy se anotan en papel.
     """
     movement_type = movement_type.upper()
     if movement_type not in ("IN", "OUT"):
@@ -50,10 +55,11 @@ def record_movement(product_name, movement_type, quantity, note=""):
         )
         conn.execute(
             """
-            INSERT INTO movements (product_id, movement_type, quantity, note)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO movements
+                (product_id, movement_type, quantity, note, supplier, po_number, batch_lot, expiry_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (product["id"], movement_type, quantity, note),
+            (product["id"], movement_type, quantity, note, supplier, po_number, batch_lot, expiry_date),
         )
 
         conn.commit()

@@ -13,6 +13,7 @@ from products import (
     low_stock_alert,
 )
 from movements import record_movement, movement_history
+from goods_in import receive_goods, goods_in_history, expiring_soon
 from reports import (
     total_stock_value_by_category,
     most_moved_products,
@@ -53,6 +54,9 @@ def menu():
 7. Cambiar stock mínimo de un producto
 8. Eliminar producto
 9. Reportes
+10. Recepción de mercadería (Goods In)
+11. Historial de recepciones (Goods In)
+12. Productos próximos a vencer
 0. Salir
 =================================
 """
@@ -123,6 +127,51 @@ def menu():
 
             avg = average_stock()
             print(f"\nStock promedio entre todos los productos: {avg:.2f}" if avg else "\nNo hay datos suficientes.")
+
+        elif choice == "10":
+            print("\n--- Recepción de mercadería (Goods In) ---")
+            name = input("Producto recibido: ").strip()
+            qty = int(input("Cantidad recibida: ").strip())
+            supplier = input("Proveedor (opcional): ").strip() or None
+            po = input("Número de remito/PO (opcional): ").strip() or None
+            batch = input("Lote (opcional): ").strip() or None
+            expiry = input("Fecha de vencimiento YYYY-MM-DD (opcional): ").strip() or None
+            note = input("Nota (opcional): ").strip()
+
+            existing = None
+            from products import get_product_by_name
+            existing = get_product_by_name(name)
+            category, min_stock, unit = "General", 5, "unidades"
+            if existing is None:
+                print(f"'{name}' es un producto nuevo, vamos a registrarlo.")
+                category = input("Categoría (Enter para 'General'): ").strip() or "General"
+                min_stock = int(input("Stock mínimo (Enter para 5): ").strip() or 5)
+                unit = input("Unidad (Enter para 'unidades'): ").strip() or "unidades"
+
+            receive_goods(name, qty, supplier=supplier, po_number=po,
+                          batch_lot=batch, expiry_date=expiry, note=note,
+                          category=category, min_stock=min_stock, unit=unit)
+
+        elif choice == "11":
+            rows = goods_in_history()
+            if not rows:
+                print("  (sin recepciones registradas)")
+            else:
+                print(f"{'Fecha':<20}{'Producto':<18}{'Cant.':<7}{'Proveedor':<15}{'Remito':<12}{'Lote':<10}{'Vence':<12}")
+                for r in rows:
+                    print(f"{r['timestamp']:<20}{r['name']:<18}{r['quantity']:<7}"
+                          f"{r['supplier'] or '':<15}{r['po_number'] or '':<12}"
+                          f"{r['batch_lot'] or '':<10}{r['expiry_date'] or '':<12}")
+
+        elif choice == "12":
+            days = int(input("Mostrar vencimientos en los próximos N días (Enter para 7): ").strip() or 7)
+            rows = expiring_soon(days)
+            if not rows:
+                print(f"  No hay productos venciendo en los próximos {days} días.")
+            else:
+                print(f"⚠️  Productos próximos a vencer (próximos {days} días):")
+                for r in rows:
+                    print(f"  {r['name']} | Lote: {r['batch_lot'] or '-'} | Vence: {r['expiry_date']} | Cantidad: {r['quantity']}")
 
         elif choice == "0":
             print("¡Hasta la próxima!")

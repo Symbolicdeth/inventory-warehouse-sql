@@ -46,10 +46,21 @@ def setup_database():
             movement_type TEXT NOT NULL CHECK (movement_type IN ('IN', 'OUT')),
             quantity INTEGER NOT NULL CHECK (quantity > 0),
             note TEXT,
+            supplier TEXT,
+            po_number TEXT,
+            batch_lot TEXT,
+            expiry_date TEXT,
             timestamp TEXT DEFAULT (datetime('now')),
             FOREIGN KEY (product_id) REFERENCES products(id)
         );
     """)
+
+    # Migración suave: si la base ya existía de una versión anterior,
+    # agrega las columnas nuevas sin borrar nada.
+    existing_cols = [row["name"] for row in cursor.execute("PRAGMA table_info(movements)")]
+    for col in ("supplier", "po_number", "batch_lot", "expiry_date"):
+        if col not in existing_cols:
+            cursor.execute(f"ALTER TABLE movements ADD COLUMN {col} TEXT")
 
     conn.commit()
     conn.close()
