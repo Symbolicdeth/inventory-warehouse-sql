@@ -2,7 +2,7 @@
 
 Proyecto de portfolio inspirado en operaciones reales de warehouse (control de
 inventario, entradas/salidas de stock, alertas de stock bajo). Construido para
-practicar Python + SQL aplicados a un caso de uso real.
+Python + SQL aplicados a un caso de uso real.
 
 ## Funcionalidades
 
