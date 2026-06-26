@@ -2,7 +2,7 @@
 
 Proyecto de portfolio inspirado en operaciones reales de warehouse (control de
 inventario, entradas/salidas de stock, alertas de stock bajo). Construido para
-Python + SQL aplicados a un caso de uso real.
+practicar Python + SQL aplicados a un caso de uso real.
 
 ## Funcionalidades
 
@@ -25,7 +25,7 @@ Python + SQL aplicados a un caso de uso real.
 ## Cómo correrlo
 
 ```bash
-py main.py
+python main.py
 ```
 
 Esto crea automáticamente el archivo `inventory.db` la primera vez que se
