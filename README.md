@@ -25,7 +25,7 @@ practicar Python + SQL aplicados a un caso de uso real.
 ## Cómo correrlo
 
 ```bash
-python main.py
+py main.py
 ```
 
 Esto crea automáticamente el archivo `inventory.db` la primera vez que se
