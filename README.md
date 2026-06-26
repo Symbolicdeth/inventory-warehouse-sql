@@ -32,12 +32,12 @@ practicar Python + SQL aplicados a un caso de uso real.
 
 **Versión de línea de comandos (menú de texto):**
 ```bash
-python main.py
+py main.py
 ```
 
 **Versión con interfaz gráfica (ventana de escritorio, Tkinter):**
 ```bash
-python app.py
+py app.py
 ```
 
 Ambas comparten la misma lógica de negocio (`database.py`, `products.py`,
