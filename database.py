@@ -14,11 +14,11 @@ from pathlib import Path
 DB_PATH = Path(__file__).parent / "inventory.db"
 
 
-def get_connection():
+def get_connection(db_path=DB_PATH):
     """Abre una conexión a la base de datos SQLite."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row  # permite acceder a columnas por nombre
-    conn.execute("PRAGMA foreign_keys = ON;")  # SQLite no las activa por defecto
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 
