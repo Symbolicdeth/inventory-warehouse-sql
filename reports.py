@@ -88,3 +88,29 @@ def movement_summary():
 
     conn.close()
     return row
+
+def movement_totals_by_product():
+    """Resume entradas y salidas acumuladas por producto."""
+    conn = get_connection()
+
+    rows = conn.execute("""
+        SELECT
+            p.name,
+            p.category,
+            SUM(CASE
+                WHEN m.movement_type = 'IN' THEN m.quantity
+                ELSE 0
+            END) AS total_in,
+            SUM(CASE
+                WHEN m.movement_type = 'OUT' THEN m.quantity
+                ELSE 0
+            END) AS total_out,
+            COUNT(m.id) AS total_movements
+        FROM products p
+        LEFT JOIN movements m ON p.id = m.product_id
+        GROUP BY p.id, p.name, p.category
+        ORDER BY total_movements DESC, p.name ASC
+    """).fetchall()
+
+    conn.close()
+    return rows
