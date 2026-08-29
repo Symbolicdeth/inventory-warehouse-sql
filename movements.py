@@ -96,7 +96,7 @@ def movement_history(product_name=None, limit=20):
             SELECT m.id, p.name, m.movement_type, m.quantity, m.note, m.timestamp
             FROM movements m
             JOIN products p ON m.product_id = p.id
-            ORDER BY m.timestamp DESC
+            ORDER BY m.timestamp DESC, m.id DESC
             LIMIT ?
         """
         rows = conn.execute(query, (limit,)).fetchall()
