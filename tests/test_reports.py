@@ -214,3 +214,57 @@ def test_low_stock_products(test_db, monkeypatch):
     assert report[0]["stock"] == 2
     assert report[1]["name"] == "Tuna"
     assert report[1]["stock"] == 5
+
+def test_movement_summary(test_db, monkeypatch):
+
+    monkeypatch.setattr(
+        reports,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    monkeypatch.setattr(
+        products,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    monkeypatch.setattr(
+        movements,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    products.add_product(
+        "Salmon",
+        "Fish",
+        10,
+        5,
+        "kg"
+    )
+
+    movements.record_movement(
+        "Salmon",
+        "IN",
+        10
+    )
+
+    movements.record_movement(
+        "Salmon",
+        "OUT",
+        3
+    )
+
+    movements.record_movement(
+        "Salmon",
+        "OUT",
+        2
+    )
+
+    summary = reports.movement_summary()
+
+    assert summary["total_movements"] == 3
+    assert summary["in_movements"] == 1
+    assert summary["out_movements"] == 2
+    assert summary["total_in"] == 10
+    assert summary["total_out"] == 5

@@ -71,3 +71,20 @@ def low_stock_products():
     """).fetchall()
     conn.close()
     return rows
+
+def movement_summary():
+    """Devuelve un resumen de entradas y salidas de stock."""
+    conn = get_connection()
+
+    row = conn.execute("""
+        SELECT
+            COUNT(*) AS total_movements,
+            SUM(CASE WHEN movement_type = 'IN' THEN 1 ELSE 0 END) AS in_movements,
+            SUM(CASE WHEN movement_type = 'OUT' THEN 1 ELSE 0 END) AS out_movements,
+            SUM(CASE WHEN movement_type = 'IN' THEN quantity ELSE 0 END) AS total_in,
+            SUM(CASE WHEN movement_type = 'OUT' THEN quantity ELSE 0 END) AS total_out
+        FROM movements
+    """).fetchone()
+
+    conn.close()
+    return row
