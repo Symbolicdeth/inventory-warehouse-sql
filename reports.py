@@ -59,3 +59,15 @@ def average_stock():
     row = conn.execute("SELECT AVG(stock) AS avg_stock FROM products").fetchone()
     conn.close()
     return row["avg_stock"]
+
+def low_stock_products():
+    """Devuelve productos cuyo stock está en o por debajo del mínimo."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT id, name, category, stock, min_stock, unit
+        FROM products
+        WHERE stock <= min_stock
+        ORDER BY stock ASC, name ASC
+    """).fetchall()
+    conn.close()
+    return rows

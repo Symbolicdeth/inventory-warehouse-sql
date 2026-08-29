@@ -168,3 +168,49 @@ def test_products_never_moved(test_db, monkeypatch):
 
     assert len(report) == 1
     assert report[0]["name"] == "Rice"
+
+def test_low_stock_products(test_db, monkeypatch):
+
+    monkeypatch.setattr(
+        reports,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    monkeypatch.setattr(
+        products,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    products.add_product(
+        "Salmon",
+        "Fish",
+        2,
+        5,
+        "kg"
+    )
+
+    products.add_product(
+        "Tuna",
+        "Fish",
+        5,
+        5,
+        "kg"
+    )
+
+    products.add_product(
+        "Rice",
+        "Dry Goods",
+        20,
+        5,
+        "kg"
+    )
+
+    report = reports.low_stock_products()
+
+    assert len(report) == 2
+    assert report[0]["name"] == "Salmon"
+    assert report[0]["stock"] == 2
+    assert report[1]["name"] == "Tuna"
+    assert report[1]["stock"] == 5
