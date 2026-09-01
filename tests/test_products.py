@@ -147,3 +147,39 @@ def test_low_stock_alert(test_db, monkeypatch):
     assert len(low_stock) == 2
     assert low_stock[0]["name"] == "Salmon"
     assert low_stock[1]["name"] == "Rice"
+
+def test_update_product(test_db, monkeypatch):
+
+    monkeypatch.setattr(
+        products,
+        "get_connection",
+        lambda: get_connection(test_db)
+    )
+
+    products.add_product(
+        "Salmon",
+        "Fish",
+        10,
+        5,
+        "kg"
+    )
+
+    products.update_product(
+        "Salmon",
+        "Atlantic Salmon",
+        "Seafood",
+        25,
+        8,
+        "kg"
+    )
+
+    updated = products.get_product_by_name("Atlantic Salmon")
+
+    assert updated is not None
+    assert updated["category"] == "Seafood"
+    assert updated["stock"] == 25
+    assert updated["min_stock"] == 8
+    assert updated["unit"] == "kg"
+
+    old_product = products.get_product_by_name("Salmon")
+    assert old_product is None
