@@ -1,366 +1,1645 @@
-"""
-app.py
-Interfaz de escritorio (Tkinter) para el sistema de inventario.
-Reutiliza toda la lógica ya existente en database.py, products.py,
-movements.py, goods_in.py y reports.py — esto es solo la capa visual.
-
-Ejecutar con: py app.py
-"""
-
 import tkinter as tk
 from tkinter import ttk, messagebox
+from datetime import datetime
 
-from database import setup_database
-from products import (
-    add_product,
-    list_products,
-    update_min_stock,
-    delete_product,
-    low_stock_alert,
-)
-from movements import movement_history
-from goods_in import receive_goods, goods_in_history, expiring_soon
-from reports import (
-    total_stock_value_by_category,
-    most_moved_products,
-    products_never_moved,
-    average_stock,
-)
+import products
+import movements
+import goods_in
+import products
+import movements
+import goods_in
 
-
-# ---------------------------------------------------------------------------
-# Ventana principal
-# ---------------------------------------------------------------------------
 
 class InventoryApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Inventory System Production for Warehouse  ")
-        self.geometry("1080x720")
-        self.minsize(800, 500)
 
-        setup_database()
+        self.title("Inventory System")
+        self.geometry("1200x700")
+        self.minsize(1000, 600)
 
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        self.create_layout()
 
-        self.products_tab = ProductsTab(notebook)
-        self.goods_in_tab = GoodsInTab(notebook)
-        self.movements_tab = MovementsTab(notebook)
-        self.alerts_tab = AlertsTab(notebook)
-        self.reports_tab = ReportsTab(notebook)
+    def create_layout(self):
+        # =========================
+        # MAIN CONTAINER
+        # =========================
+        main = ttk.Frame(self)
+        main.pack(fill="both", expand=True)
 
-        notebook.add(self.products_tab, text="Productos")
-        notebook.add(self.goods_in_tab, text="Goods In (Recepción)")
-        notebook.add(self.movements_tab, text="Movimientos")
-        notebook.add(self.alerts_tab, text="Alertas")
-        notebook.add(self.reports_tab, text="Reportes")
+        # =========================
+        # SIDEBAR
+        # =========================
+        sidebar = ttk.Frame(main, width=220)
+        sidebar.pack(side="left", fill="y")
+        sidebar.pack_propagate(False)
 
-        # Refrescar pestañas dependientes cuando se cambia de tab
-        notebook.bind("<<NotebookTabChanged>>", lambda e: self.refresh_all())
+        # =========================
+        # CONTENT AREA
+        # =========================
+        self.content = ttk.Frame(main)
+        self.content.pack(side="right", fill="both", expand=True)
 
-    def refresh_all(self):
-        self.products_tab.refresh()
-        self.alerts_tab.refresh()
-        self.reports_tab.refresh()
-        self.movements_tab.refresh()
-
-
-# ---------------------------------------------------------------------------
-# Pestaña: Productos
-# ---------------------------------------------------------------------------
-
-class ProductsTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self._build_form()
-        self._build_table()
-        self.refresh()
-
-    def _build_form(self):
-        form = ttk.LabelFrame(self, text="Agregar nuevo producto")
-        form.pack(fill="x", padx=10, pady=10)
-
-        labels = ["Nombre", "Categoría", "Stock inicial", "Stock mínimo", "Unidad"]
-        self.entries = {}
-        for i, label in enumerate(labels):
-            ttk.Label(form, text=label).grid(row=0, column=i, padx=5, pady=5)
-            entry = ttk.Entry(form, width=14)
-            entry.grid(row=1, column=i, padx=5, pady=5)
-            self.entries[label] = entry
-
-        ttk.Button(form, text="Agregar", command=self.add_product_clicked).grid(
-            row=1, column=len(labels), padx=10
+        # =========================
+        # SIDEBAR TITLE
+        # =========================
+        title = ttk.Label(
+            sidebar,
+            text="INVENTORY SYSTEM",
+            font=("Segoe UI", 14, "bold")
         )
+        title.pack(pady=(25, 30))
 
-    def _build_table(self):
-        table_frame = ttk.Frame(self)
-        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
-
-        columns = ("id", "name", "category", "stock", "min_stock", "unit")
-        headers = ("ID", "Nombre", "Categoría", "Stock", "Mínimo", "Unidad")
-
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
-        for col, head in zip(columns, headers):
-            self.tree.heading(col, text=head)
-            self.tree.column(col, width=120 if col != "id" else 50)
-        self.tree.pack(fill="both", expand=True, side="left")
-
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill="x", padx=10, pady=5)
-        ttk.Button(btn_frame, text="Eliminar seleccionado", command=self.delete_selected).pack(side="left", padx=5)
-        ttk.Button(btn_frame, text="Actualizar", command=self.refresh).pack(side="left", padx=5)
-
-    def add_product_clicked(self):
-        name = self.entries["Nombre"].get().strip()
-        if not name:
-            messagebox.showwarning("Falta info", "El nombre del producto es obligatorio.")
-            return
-        category = self.entries["Categoría"].get().strip() or "General"
-        unit = self.entries["Unidad"].get().strip() or "unidades"
-        try:
-            stock = int(self.entries["Stock inicial"].get().strip() or 0)
-            min_stock = int(self.entries["Stock mínimo"].get().strip() or 5)
-        except ValueError:
-            messagebox.showerror("Error", "Stock y stock mínimo deben ser números.")
-            return
-
-        add_product(name, category, stock, min_stock, unit)
-        for entry in self.entries.values():
-            entry.delete(0, tk.END)
-        self.refresh()
-
-    def delete_selected(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showinfo("Nada seleccionado", "Elegí un producto de la tabla primero.")
-            return
-        name = self.tree.item(selected[0])["values"][1]
-        if messagebox.askyesno("Confirmar", f"¿Eliminar '{name}'?"):
-            delete_product(name)
-            self.refresh()
-
-    def refresh(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        for p in list_products():
-            self.tree.insert("", "end", values=(p["id"], p["name"], p["category"], p["stock"], p["min_stock"], p["unit"]))
-
-
-# ---------------------------------------------------------------------------
-# Pestaña: Goods In (Recepción)
-# ---------------------------------------------------------------------------
-
-class GoodsInTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self._build_form()
-        self._build_table()
-        self.refresh()
-
-    def _build_form(self):
-        form = ttk.LabelFrame(self, text="Registrar recepción de mercancia")
-        form.pack(fill="x", padx=10, pady=10)
-
-        fields = [
-            ("Producto", "Producto"),
-            ("Cantidad", "Cantidad"),
-            ("Proveedor", "Proveedor"),
-            ("Invoice/ PO", "PO"),
-            ("Lote", "Lote"),
-            ("Use by Date (YYYY-MM-DD)", "Vencimiento"),
+        # =========================
+        # NAVIGATION
+        # =========================
+        buttons = [
+            "Dashboard",
+            "Products",
+            "Goods In",
+            "Movements",
+            "Alerts",
+            "Reports",
         ]
-        self.entries = {}
-        for i, (label, key) in enumerate(fields):
-            r, c = divmod( i, 3)
-            ttk.Label(form, text=label).grid(row=r * 2, column=c, padx=5, pady=(5, 0), sticky="w")
-            entry = ttk.Entry(form, width=22)
-            entry.grid(row=r * 2 + 1, column=c, padx=5, pady=(0, 5), sticky="w")
-            self.entries[key] = entry
 
-        ttk.Button(form, text="Registrar recepción", command=self.receive_clicked).grid(
-            row=4, column=0, columnspan=3, pady=10
+        for name in buttons:
+            button = ttk.Button(
+                sidebar,
+                text=name,
+                command=lambda n=name: self.show_page(n)
+            )
+            button.pack(fill="x", padx=15, pady=5)
+
+        # =========================
+        # INITIAL PAGE
+        # =========================
+        self.show_page("Dashboard")
+
+    def show_page(self, page_name):
+        # Remove current content
+        for widget in self.content.winfo_children():
+            widget.destroy()
+
+        if page_name == "Dashboard":
+            self.show_dashboard()
+
+        elif page_name == "Products":
+            self.show_products()
+
+        elif page_name == "Goods In":
+            self.show_goods_in()
+            
+        elif page_name == "Movements":
+            self.show_movements()
+
+        else:
+            title = ttk.Label(
+                self.content,
+                text=page_name,
+                font=("Segoe UI", 24, "bold")
+            )
+            title.pack(anchor="nw", padx=30, pady=30)
+
+    def show_products(self):
+        # =========================
+        # HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(
+            fill="x",
+            padx=30,
+            pady=(30, 20)
         )
 
-    def _build_table(self):
-        table_frame = ttk.Frame(self)
-        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        ttk.Label(
+            header,
+            text="Products",
+            font=("Segoe UI", 24, "bold")
+        ).pack(anchor="w")
 
-        columns = ("name", "quantity", "supplier", "po_number", "batch_lot", "expiry_date", "timestamp")
-        headers = ("Producto", "Cant.", "Proveedor", "Remito", "Lote", "Vence", "Fecha")
+        ttk.Label(
+            header,
+            text="Manage inventory products",
+            font=("Segoe UI", 11)
+        ).pack(
+            anchor="w",
+            pady=(5, 0)
+        )
 
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
-        for col, head in zip(columns, headers):
-            self.tree.heading(col, text=head)
-            self.tree.column(col, width=120)
-        self.tree.pack(fill="both", expand=True, side="left")
+        # =========================
+        # TOOLBAR
+        # =========================
+        toolbar = ttk.Frame(self.content)
+        toolbar.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 15)
+        )
 
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        ttk.Label(
+            toolbar,
+            text="Search:"
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
 
-    def receive_clicked(self):
-        name = self.entries["Producto"].get().strip()
-        if not name:
-            messagebox.showwarning("Falta info", "El nombre del producto es obligatorio.")
+        self.product_search = ttk.Entry(
+            toolbar,
+            width=35
+        )
+
+        self.product_search.pack(
+            side="left"
+        )
+
+        ttk.Button(
+            toolbar,
+            text="+ Add Product",
+            command=self.show_add_product_dialog
+        ).pack(
+            side="right"
+        )
+        
+        ttk.Button(
+            toolbar,
+            text="Edit Product",
+            command=self.edit_selected_product
+        ).pack(
+            side="right",
+            padx=(0, 5)
+        )
+        ttk.Button(
+            toolbar,
+            text="Delete Product",
+            command=self.delete_selected_product
+        ).pack(
+            side="right",
+            padx=(0, 5)
+        )
+        # =========================
+        # TABLE
+        # =========================
+        table_frame = ttk.Frame(self.content)
+        table_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 20)
+        )
+
+        columns = (
+            "name",
+            "category",
+            "stock",
+            "min_stock",
+            "unit"
+        )
+
+        self.products_tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings"
+        )
+
+        self.products_tree.heading(
+            "name",
+            text="Name"
+        )
+
+        self.products_tree.heading(
+            "category",
+            text="Category"
+        )
+
+        self.products_tree.heading(
+            "stock",
+            text="Stock"
+        )
+
+        self.products_tree.heading(
+            "min_stock",
+            text="Min Stock"
+        )
+
+        self.products_tree.heading(
+            "unit",
+            text="Unit"
+        )
+
+        self.products_tree.column(
+            "name",
+            width=220
+        )
+
+        self.products_tree.column(
+            "category",
+            width=180
+        )
+
+        self.products_tree.column(
+            "stock",
+            width=100
+        )
+
+        self.products_tree.column(
+            "min_stock",
+            width=120
+        )
+
+        self.products_tree.column(
+            "unit",
+            width=120
+        )
+
+        scrollbar = ttk.Scrollbar(
+            table_frame,
+            orient="vertical",
+            command=self.products_tree.yview
+        )
+
+        self.products_tree.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        self.products_tree.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+
+        # Search while typing
+        self.product_search.bind(
+            "<KeyRelease>",
+            lambda event: self.refresh_products()
+        )
+
+        self.refresh_products()
+
+    def refresh_products(self):
+        if not hasattr(self, "products_tree"):
             return
+
+        for item in self.products_tree.get_children():
+            self.products_tree.delete(item)
+
+        search_text = self.product_search.get().strip().lower()
+
+        product_list = products.list_products()
+        
+        print("PRODUCTOS CARGADOS:", len(product_list))
+
+        for product in product_list:
+            name = str(product["name"] or "")
+            category = str(product["category"] or "")
+
+            if (
+                search_text == ""
+                or search_text in name.lower()
+                or search_text in category.lower()
+            ):
+                self.products_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        product["name"],
+                        product["category"],
+                        product["stock"],
+                        product["min_stock"],
+                        product["unit"]
+                    )
+                )
+    def show_add_product_dialog(self):
+        dialog = tk.Toplevel(self)
+        dialog.title("Add Product")
+        dialog.geometry("450x520")
+        dialog.resizable(False, False)
+
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ttk.Frame(
+            dialog,
+            padding=25
+        )
+        frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        ttk.Label(
+            frame,
+            text="Add Product",
+            font=("Segoe UI", 18, "bold")
+        ).pack(
+            anchor="w",
+            pady=(0, 20)
+        )
+
+        fields = {}
+
+        field_data = [
+            ("Name", "name"),
+            ("Category", "category"),
+            ("Stock", "stock"),
+            ("Minimum Stock", "min_stock"),
+            ("Unit", "unit"),
+        ]
+
+        for label, key in field_data:
+            ttk.Label(
+                frame,
+                text=label
+            ).pack(
+                anchor="w",
+                pady=(8, 3)
+            )
+
+            entry = ttk.Entry(frame)
+            entry.pack(
+                fill="x"
+            )
+
+            fields[key] = entry
+
+        def save_product():
+            name = fields["name"].get().strip()
+            category = fields["category"].get().strip() or "General"
+            unit = fields["unit"].get().strip() or "unidades"
+
+            if not name:
+                messagebox.showwarning(
+                    "Missing information",
+                    "Product name is required.",
+                    parent=dialog
+                )
+                return
+
+            try:
+                stock = int(fields["stock"].get().strip() or 0)
+                min_stock = int(
+                    fields["min_stock"].get().strip() or 5
+                )
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid value",
+                    "Stock values must be numbers.",
+                    parent=dialog
+                )
+                return
+
+            if stock < 0 or min_stock < 0:
+                messagebox.showerror(
+                    "Invalid value",
+                    "Stock values cannot be negative.",
+                    parent=dialog
+                )
+                return
+
+            products.add_product(
+                name,
+                category,
+                stock,
+                min_stock,
+                unit
+            )
+
+            dialog.destroy()
+            self.show_page("Products")
+
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(
+            fill="x",
+            side="bottom",
+            pady=(25, 0)
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Save Product",
+            command=save_product
+        ).pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(0, 5)
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy
+        ).pack(
+            side="right",
+            fill="x",
+            expand=True,
+            padx=(5, 0)
+        ) 
+    def delete_selected_product(self):
+        selected = self.products_tree.selection()
+
+        if not selected:
+            messagebox.showinfo(
+                "No selection",
+                "Select a product from the table first."
+            )
+            return
+
+        values = self.products_tree.item(
+            selected[0],
+            "values"
+        )
+
+        name = values[0]
+
+        confirmed = messagebox.askyesno(
+            "Delete Product",
+            f"Are you sure you want to delete '{name}'?"
+        )
+
+        if not confirmed:
+            return
+
+        success, message = products.delete_product(name)
+
+        if success:
+            messagebox.showinfo(
+                "Product Deleted",
+                message
+            )
+            self.refresh_products()
+
+        else:
+            messagebox.showwarning(
+                "Cannot Delete Product",
+                message
+            )
+    def edit_selected_product(self):
+        selected = self.products_tree.selection()
+
+        if not selected:
+            messagebox.showinfo(
+                "No selection",
+                "Select a product from the table first."
+            )
+            return
+
+        values = self.products_tree.item(
+            selected[0],
+            "values"
+        )
+
+        name = values[0]
+        category = values[1]
+        stock = values[2]
+        min_stock = values[3]
+        unit = values[4]
+
+        dialog = tk.Toplevel(self)
+        dialog.title("Edit Product")
+        dialog.geometry("450x520")
+        dialog.resizable(False, False)
+
+        dialog.transient(self)
+        dialog.grab_set()
+
+        frame = ttk.Frame(
+            dialog,
+            padding=25
+        )
+        frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        ttk.Label(
+            frame,
+            text="Edit Product",
+            font=("Segoe UI", 18, "bold")
+        ).pack(
+            anchor="w",
+            pady=(0, 20)
+        )
+
+        fields = {}
+
+        field_data = [
+            ("Name", "name", name),
+            ("Category", "category", category),
+            ("Stock", "stock", stock),
+            ("Minimum Stock", "min_stock", min_stock),
+            ("Unit", "unit", unit),
+        ]
+
+        for label, key, value in field_data:
+            ttk.Label(
+                frame,
+                text=label
+            ).pack(
+                anchor="w",
+                pady=(8, 3)
+            )
+
+            entry = ttk.Entry(frame)
+            entry.pack(
+                fill="x"
+            )
+
+            entry.insert(
+                0,
+                str(value or "")
+            )
+
+            fields[key] = entry
+
+        def save_changes():
+            new_name = fields["name"].get().strip()
+            new_category = (
+                fields["category"].get().strip()
+                or "General"
+            )
+            new_unit = (
+                fields["unit"].get().strip()
+                or "unidades"
+            )
+
+            if not new_name:
+                messagebox.showwarning(
+                    "Missing information",
+                    "Product name is required.",
+                    parent=dialog
+                )
+                return
+
+            try:
+                new_stock = int(
+                    fields["stock"].get().strip()
+                )
+
+                new_min_stock = int(
+                    fields["min_stock"].get().strip()
+                )
+
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid value",
+                    "Stock values must be numbers.",
+                    parent=dialog
+                )
+                return
+
+            if new_stock < 0 or new_min_stock < 0:
+                messagebox.showerror(
+                    "Invalid value",
+                    "Stock values cannot be negative.",
+                    parent=dialog
+                )
+                return
+
+            products.update_product(
+                name,
+                new_name,
+                new_category,
+                new_stock,
+                new_min_stock,
+                new_unit
+            )
+
+            dialog.destroy()
+            self.show_page("Products")
+
+        button_frame = ttk.Frame(frame)
+        button_frame.pack(
+            fill="x",
+            side="bottom",
+            pady=(25, 0)
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Save Changes",
+            command=save_changes
+        ).pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(0, 5)
+        )
+
+        ttk.Button(
+            button_frame,
+            text="Cancel",
+            command=dialog.destroy
+        ).pack(
+            side="right",
+            fill="x",
+            expand=True,
+            padx=(5, 0)
+        )
+    def show_goods_in(self):
+        # =========================
+        # HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(
+            fill="x",
+            padx=30,
+            pady=(30, 20)
+        )
+
+        ttk.Label(
+            header,
+            text="Goods In",
+            font=("Segoe UI", 24, "bold")
+        ).pack(anchor="w")
+
+        ttk.Label(
+            header,
+            text="Receive incoming stock",
+            font=("Segoe UI", 11)
+        ).pack(
+            anchor="w",
+            pady=(5, 0)
+        )
+
+        # =========================
+        # FORM CONTAINER
+        # =========================
+        form = ttk.LabelFrame(
+            self.content,
+            text="Receiving Information"
+        )
+
+        form.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        # Make four columns expand
+        for column in range(4):
+            form.columnconfigure(
+                column,
+                weight=1
+            )
+
+        # =========================
+        # PRODUCT
+        # =========================
+        ttk.Label(
+            form,
+            text="Product"
+        ).grid(
+            row=0,
+            column=0,
+            padx=10,
+            pady=(15, 5),
+            sticky="w"
+        )
+
+        product_names = [
+            product["name"]
+            for product in products.list_products()
+        ]
+
+        product_entry = ttk.Combobox(
+            form,
+            values=product_names,
+            state="normal"
+        )
+
+        product_entry.grid(
+            row=1,
+            column=0,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # QUANTITY
+        # =========================
+        ttk.Label(
+            form,
+            text="Quantity"
+        ).grid(
+            row=0,
+            column=1,
+            padx=10,
+            pady=(15, 5),
+            sticky="w"
+        )
+
+        quantity_entry = ttk.Entry(form)
+        quantity_entry.grid(
+            row=1,
+            column=1,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # SUPPLIER
+        # =========================
+        ttk.Label(
+            form,
+            text="Supplier"
+        ).grid(
+            row=0,
+            column=2,
+            padx=10,
+            pady=(15, 5),
+            sticky="w"
+        )
+
+        supplier_entry = ttk.Entry(form)
+        supplier_entry.grid(
+            row=1,
+            column=2,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # PO NUMBER
+        # =========================
+        ttk.Label(
+            form,
+            text="PO Number"
+        ).grid(
+            row=0,
+            column=3,
+            padx=10,
+            pady=(15, 5),
+            sticky="w"
+        )
+
+        po_entry = ttk.Entry(form)
+        po_entry.grid(
+            row=1,
+            column=3,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # BATCH / LOT
+        # =========================
+        ttk.Label(
+            form,
+            text="Batch / Lot"
+        ).grid(
+            row=2,
+            column=0,
+            padx=10,
+            pady=(5, 5),
+            sticky="w"
+        )
+
+        batch_entry = ttk.Entry(form)
+        batch_entry.grid(
+            row=3,
+            column=0,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # EXPIRY DATE
+        # =========================
+        ttk.Label(
+            form,
+            text="Expiry Date"
+        ).grid(
+            row=2,
+            column=1,
+            padx=10,
+            pady=(5, 5),
+            sticky="w"
+        )
+
+        expiry_entry = ttk.Entry(form)
+        expiry_entry.grid(
+            row=3,
+            column=1,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # CATEGORY
+        # =========================
+        ttk.Label(
+            form,
+            text="Category"
+        ).grid(
+            row=2,
+            column=2,
+            padx=10,
+            pady=(5, 5),
+            sticky="w"
+        )
+
+        category_entry = ttk.Entry(form)
+        category_entry.grid(
+            row=3,
+            column=2,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+
+        # =========================
+        # UNIT
+        # =========================
+        ttk.Label(
+            form,
+            text="Unit"
+        ).grid(
+            row=2,
+            column=3,
+            padx=10,
+            pady=(5, 5),
+            sticky="w"
+        )
+
+        unit_entry = ttk.Entry(form)
+        unit_entry.grid(
+            row=3,
+            column=3,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+        def fill_product_details(event=None):
+            selected_name = product_entry.get().strip()
+
+            if not selected_name:
+                return
+
+            product = products.get_product_by_name(selected_name)
+
+            if product is None:
+                return 
+
+            category_entry.delete(0, tk.END)
+            category_entry.insert(0, product["category"] or "")
+
+            unit_entry.delete(0, tk.END)
+            unit_entry.insert(0, product["unit"] or "")    
+        product_entry.bind(
+            "<<ComboboxSelected>>",
+            fill_product_details
+        )
+        # =========================
+        # NOTE
+        # =========================
+        ttk.Label(
+            form,
+            text="Note"
+        ).grid(
+            row=4,
+            column=0,
+            padx=10,
+            pady=(5, 5),
+            sticky="w"
+        )
+
+        note_entry = ttk.Entry(form)
+        note_entry.grid(
+            row=5,
+            column=0,
+            columnspan=4,
+            padx=10,
+            pady=(0, 15),
+            sticky="ew"
+        )
+        product_entry.bind(
+            "<<ComboboxSelected>>",
+            fill_product_details
+        )
+
+        # =========================
+        # RECEIVE BUTTON
+        # =========================
+        ttk.Button(
+            form,
+            text="Receive Goods",
+            command=lambda: self.receive_goods_clicked(
+                product_entry,
+                quantity_entry,
+                supplier_entry,
+                po_entry,
+                batch_entry,
+                expiry_entry,
+                category_entry,
+                unit_entry,
+                note_entry
+            )
+        ).grid(
+            row=6,
+            column=3,
+            padx=10,
+            pady=(0, 20),
+            sticky="e"
+        )
+            # =========================
+        # RECENT RECEIPTS
+        # =========================
+        history_frame = ttk.LabelFrame(
+            self.content,
+            text="Recent Receipts"
+        )
+
+        history_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 30)
+        )
+
+        columns = (
+            "name",
+            "quantity",
+            "supplier",
+            "po_number",
+            "batch_lot",
+            "expiry_date",
+            "timestamp"
+        )
+
+        self.goods_in_tree = ttk.Treeview(
+            history_frame,
+            columns=columns,
+            show="headings"
+        )
+
+        headers = (
+            "Product",
+            "Quantity",
+            "Supplier",
+            "PO Number",
+            "Batch / Lot",
+            "Expiry",
+            "Date"
+        )
+
+        for column, header_text in zip(columns, headers):
+            self.goods_in_tree.heading(
+                column,
+                text=header_text
+            )
+
+        self.goods_in_tree.column("name", width=150)
+        self.goods_in_tree.column("quantity", width=80)
+        self.goods_in_tree.column("supplier", width=150)
+        self.goods_in_tree.column("po_number", width=120)
+        self.goods_in_tree.column("batch_lot", width=120)
+        self.goods_in_tree.column("expiry_date", width=110)
+        self.goods_in_tree.column("timestamp", width=150)
+
+        scrollbar = ttk.Scrollbar(
+            history_frame,
+            orient="vertical",
+            command=self.goods_in_tree.yview
+        )
+
+        self.goods_in_tree.configure(
+            yscrollcommand=scrollbar.set
+        )
+
+        self.goods_in_tree.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y",
+            pady=10
+        )
+
+        self.refresh_goods_in_history()
+    def refresh_goods_in_history(self):
+        for item in self.goods_in_tree.get_children():
+            self.goods_in_tree.delete(item)
+
+        for row in goods_in.goods_in_history(limit=100):
+            self.goods_in_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["name"],
+                    row["quantity"],
+                    row["supplier"] or "",
+                    row["po_number"] or "",
+                    row["batch_lot"] or "",
+                    row["expiry_date"] or "",
+                    row["timestamp"]
+                )
+            )        
+    def receive_goods_clicked(
+        self,
+        product_entry,
+        quantity_entry,
+        supplier_entry,
+        po_entry,
+        batch_entry,
+        expiry_entry,
+        category_entry,
+        unit_entry,
+        note_entry
+    ):
+        product_name = product_entry.get().strip()
+
+        if not product_name:
+            messagebox.showwarning(
+                "Missing information",
+                "Product name is required."
+            )
+            return
+
+        quantity_text = quantity_entry.get().strip()
+
+        if not quantity_text:
+            messagebox.showerror(
+                "Invalid quantity",
+                "Please enter a quantity."
+            )
+            return
+
         try:
-            qty = int(self.entries["Cantidad"].get().strip())
+            quantity = int(quantity_text)
         except ValueError:
-            messagebox.showerror("Error", "La cantidad debe ser un número.")
+            messagebox.showerror(
+                "Invalid quantity",
+                "Quantity must be a whole number."
+            )
             return
 
-        supplier = self.entries["Proveedor"].get().strip() or None
-        po = self.entries["PO"].get().strip() or None
-        batch = self.entries["Lote"].get().strip() or None
-        expiry = self.entries["Vencimiento"].get().strip() or None
+        if quantity <= 0:
+            messagebox.showerror(
+                "Invalid quantity",
+                "Quantity must be greater than 0."
+            )
+            return
 
-        receive_goods(name, qty, supplier=supplier, po_number=po,
-                      batch_lot=batch, expiry_date=expiry)
+        supplier = supplier_entry.get().strip() or None
+        po_number = po_entry.get().strip() or None
+        batch_lot = batch_entry.get().strip() or None
+        expiry_date = expiry_entry.get().strip() or None
+            
+        if expiry_date:
+            try:
+                datetime.strptime(
+                    expiry_date,
+                    "%Y-%m-%d"
+                )
+            except ValueError:
+                messagebox.showerror(
+                     "Invalid expiry date",
+                     "Expiry date must use YYYY-MM-DD format."
+                )
+                return
+        
+        category = category_entry.get().strip() or "General"
+        unit = unit_entry.get().strip() or "unidades"
+        note = note_entry.get().strip()
 
-        for entry in self.entries.values():
-            entry.delete(0, tk.END)
-        self.refresh()
-        messagebox.showinfo("Listo", f"Recepción de '{name}' registrada.")
+        goods_in.receive_goods(
+           product_name=product_name,
+           quantity=quantity,
+           supplier=supplier,
+           po_number=po_number,
+           batch_lot=batch_lot,
+           expiry_date=expiry_date,
+           note=note,
+           category=category,
+           unit=unit
+        )
 
-    def refresh(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        for r in goods_in_history():
-            self.tree.insert("", "end", values=(
-                r["name"], r["quantity"], r["supplier"] or "", r["po_number"] or "",
-                r["batch_lot"] or "", r["expiry_date"] or "", r["timestamp"]
-            ))
+        messagebox.showinfo(
+            "Goods received",
+            f"{quantity} unit(s) of '{product_name}' received successfully."
+        )
+        self.show_page("Goods In")
+    
+    def show_movements(self):
+        # =========================
+        # HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(
+            fill="x",
+            padx=30,
+            pady=(30, 20)
+        )
 
+        ttk.Label(
+            header,
+            text="Movements",
+            font=("Segoe UI", 24, "bold")
+        ).pack(anchor="w")
 
-# ---------------------------------------------------------------------------
-# Pestaña: Movimientos (historial general)
-# ---------------------------------------------------------------------------
+        ttk.Label(
+            header,
+            text="Record inventory IN and OUT movements",
+            font=("Segoe UI", 11)
+        ).pack(
+            anchor="w",
+            pady=(5, 0)
+        )
 
-class MovementsTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        filter_frame = ttk.Frame(self)
-        filter_frame.pack(fill="x", padx=10, pady=10)
+        # =========================
+        # FORM
+        # =========================
+        form_frame = ttk.LabelFrame(
+            self.content,
+            text="New Movement"
+        )
+        form_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
 
-        ttk.Label(filter_frame, text="Filtrar por producto (vacío = todos):").pack(side="left", padx=5)
-        self.filter_entry = ttk.Entry(filter_frame, width=25)
-        self.filter_entry.pack(side="left", padx=5)
-        ttk.Button(filter_frame, text="Buscar", command=self.refresh).pack(side="left", padx=5)
+        # Row 1
+        row1 = ttk.Frame(form_frame)
+        row1.pack(
+            fill="x",
+            padx=15,
+            pady=(15, 8)
+        )
 
-        table_frame = ttk.Frame(self)
-        table_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        ttk.Label(
+            row1,
+            text="Product:"
+        ).grid(
+            row=0,
+            column=0,
+            padx=(0, 8),
+            sticky="w"
+        )
 
-        columns = ("name", "movement_type", "quantity", "note", "timestamp")
-        headers = ("Producto", "Tipo", "Cantidad", "Nota", "Fecha")
+        product_entry = ttk.Combobox(
+            row1,
+            state="normal",
+            width=28
+        )
+        product_entry.grid(
+            row=0,
+            column=1,
+            padx=(0, 20),
+            sticky="ew"
+        )
 
-        self.tree = ttk.Treeview(table_frame, columns=columns, show="headings")
-        for col, head in zip(columns, headers):
-            self.tree.heading(col, text=head)
-            self.tree.column(col, width=150)
-        self.tree.pack(fill="both", expand=True, side="left")
+        product_entry["values"] = [
+            row["name"]
+            for row in products.list_products()
+        ]
 
-        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        scrollbar.pack(side="right", fill="y")
-        self.tree.configure(yscrollcommand=scrollbar.set)
+        ttk.Label(
+            row1,
+            text="Type:"
+        ).grid(
+            row=0,
+            column=2,
+            padx=(0, 8),
+            sticky="w"
+        )
 
-        self.refresh()
+        movement_type = ttk.Combobox(
+            row1,
+            state="readonly",
+            values=("IN", "OUT"),
+            width=12
+        )
+        movement_type.set("OUT")
+        movement_type.grid(
+            row=0,
+            column=3,
+            padx=(0, 20),
+            sticky="w"
+        )
 
-    def refresh(self):
-        for row in self.tree.get_children():
-            self.tree.delete(row)
-        name_filter = self.filter_entry.get().strip() or None
-        for m in movement_history(name_filter, limit=100):
-            self.tree.insert("", "end", values=(
-                m["name"], m["movement_type"], m["quantity"], m["note"] or "", m["timestamp"]
-            ))
+        ttk.Label(
+            row1,
+            text="Quantity:"
+        ).grid(
+            row=0,
+            column=4,
+            padx=(0, 8),
+            sticky="w"
+        )
 
+        quantity_entry = ttk.Entry(
+            row1,
+            width=15
+        )
+        quantity_entry.grid(
+            row=0,
+            column=5,
+            sticky="w"
+        )
 
-# ---------------------------------------------------------------------------
-# Pestaña: Alertas (stock bajo + vencimientos)
-# ---------------------------------------------------------------------------
+        row1.columnconfigure(1, weight=1)
 
-class AlertsTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
+        # Row 2
+        row2 = ttk.Frame(form_frame)
+        row2.pack(
+            fill="x",
+            padx=15,
+            pady=8
+        )
 
-        low_frame = ttk.LabelFrame(self, text="⚠️ Stock bajo")
-        low_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        ttk.Label(
+            row2,
+            text="Note:"
+        ).grid(
+            row=0,
+            column=0,
+            padx=(0, 8),
+            sticky="w"
+        )
 
-        columns = ("name", "stock", "min_stock", "unit")
-        self.low_tree = ttk.Treeview(low_frame, columns=columns, show="headings", height=6)
-        for col, head in zip(columns, ("Producto", "Stock", "Mínimo", "Unidad")):
-            self.low_tree.heading(col, text=head)
-            self.low_tree.column(col, width=140)
-        self.low_tree.pack(fill="both", expand=True, padx=5, pady=5)
+        note_entry = ttk.Entry(row2)
+        note_entry.grid(
+            row=0,
+            column=1,
+            columnspan=5,
+            sticky="ew"
+        )
 
-        exp_frame = ttk.LabelFrame(self, text="⏳ Próximos a vencer (7 días)")
-        exp_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        row2.columnconfigure(1, weight=1)
 
-        columns2 = ("name", "batch_lot", "expiry_date", "quantity", "supplier")
-        self.exp_tree = ttk.Treeview(exp_frame, columns=columns2, show="headings", height=6)
-        for col, head in zip(columns2, ("Producto", "Lote", "Vence", "Cantidad", "Proveedor")):
-            self.exp_tree.heading(col, text=head)
-            self.exp_tree.column(col, width=140)
-        self.exp_tree.pack(fill="both", expand=True, padx=5, pady=5)
+        # =========================
+        # BUTTON
+        # =========================
+        button_frame = ttk.Frame(form_frame)
+        button_frame.pack(
+            fill="x",
+            padx=15,
+            pady=(8, 15)
+        )
 
-        ttk.Button(self, text="Actualizar alertas", command=self.refresh).pack(pady=5)
+        ttk.Button(
+            button_frame,
+            text="Record Movement",
+            command=lambda: self.record_movement_clicked(
+                product_entry,
+                movement_type,
+                quantity_entry,
+                note_entry
+            )
+        ).pack(
+            side="right"
+        )
 
-        self.refresh()
+        # =========================
+        # HISTORY
+        # =========================
+        history_frame = ttk.LabelFrame(
+            self.content,
+            text="Movement History"
+        )
+        history_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 30)
+        )
 
-    def refresh(self):
-        for row in self.low_tree.get_children():
-            self.low_tree.delete(row)
-        for p in low_stock_alert():
-            self.low_tree.insert("", "end", values=(p["name"], p["stock"], p["min_stock"], p["unit"]))
+        columns = (
+            "Product",
+            "Type",
+            "Quantity",
+            "Note",
+            "Date"
+        )
 
-        for row in self.exp_tree.get_children():
-            self.exp_tree.delete(row)
-        for r in expiring_soon(7):
-            self.exp_tree.insert("", "end", values=(
-                r["name"], r["batch_lot"] or "", r["expiry_date"], r["quantity"], r["supplier"] or ""
-            ))
+        self.movements_tree = ttk.Treeview(
+            history_frame,
+            columns=columns,
+            show="headings"
+        )
 
+        for column in columns:
+            self.movements_tree.heading(
+                column,
+                text=column
+            )
 
-# ---------------------------------------------------------------------------
-# Pestaña: Reportes
-# ---------------------------------------------------------------------------
+        self.movements_tree.column(
+            "Product",
+            width=180
+        )
+        self.movements_tree.column(
+            "Type",
+            width=80,
+            anchor="center"
+        )
+        self.movements_tree.column(
+            "Quantity",
+            width=90,
+            anchor="center"
+        )
+        self.movements_tree.column(
+            "Note",
+            width=300
+        )
+        self.movements_tree.column(
+            "Date",
+            width=180
+        )
 
-class ReportsTab(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.text = tk.Text(self, wrap="word", font=("Consolas", 10))
-        self.text.pack(fill="both", expand=True, padx=10, pady=10)
-        ttk.Button(self, text="Actualizar reportes", command=self.refresh).pack(pady=5)
-        self.refresh()
+        scrollbar = ttk.Scrollbar(
+            history_frame,
+            orient="vertical",
+            command=self.movements_tree.yview
+        )
 
-    def refresh(self):
-        self.text.config(state="normal")
-        self.text.delete("1.0", tk.END)
+        self.movements_tree.configure(
+            yscrollcommand=scrollbar.set
+        )
 
-        self.text.insert(tk.END, "--- Stock total por categoría ---\n")
-        for r in total_stock_value_by_category():
-            self.text.insert(tk.END, f"  {r['category']}: {r['total_units']} unidades en {r['num_products']} productos\n")
+        self.movements_tree.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(10, 0),
+            pady=10
+        )
 
-        self.text.insert(tk.END, "\n--- Productos con más movimiento ---\n")
-        for r in most_moved_products():
-            self.text.insert(tk.END, f"  {r['name']}: {r['total_movements']} movimientos (IN: {r['total_in']}, OUT: {r['total_out']})\n")
+        scrollbar.pack(
+            side="right",
+            fill="y",
+            padx=(0, 10),
+            pady=10
+        )
 
-        self.text.insert(tk.END, "\n--- Productos sin movimientos registrados ---\n")
-        rows = products_never_moved()
-        if not rows:
-            self.text.insert(tk.END, "  (todos los productos tuvieron al menos un movimiento)\n")
-        for r in rows:
-            self.text.insert(tk.END, f"  {r['name']} (stock: {r['stock']})\n")
+        # =========================
+        # LOAD HISTORY
+        # =========================
+        for row in movements.movement_history(limit=100):
+            self.movements_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["name"],
+                    row["movement_type"],
+                    row["quantity"],
+                    row["note"] or "",
+                    row["timestamp"]
+                )
+            )
 
-        avg = average_stock()
-        self.text.insert(tk.END, f"\nStock promedio entre todos los productos: {avg:.2f}\n" if avg else "\nNo hay datos suficientes.\n")
+    def record_movement_clicked(
+        self,
+        product_entry,
+        movement_type,
+        quantity_entry,
+        note_entry
+    ):
+        product_name = product_entry.get().strip()
 
-        self.text.config(state="disabled")
+        if not product_name:
+            messagebox.showwarning(
+                "Missing information",
+                "Product name is required."
+            )
+            return
+
+        movement = movement_type.get().strip().upper()
+
+        if movement not in ("IN", "OUT"):
+            messagebox.showerror(
+                "Invalid movement",
+                "Movement type must be IN or OUT."
+            )
+            return
+
+        quantity_text = quantity_entry.get().strip()
+
+        if not quantity_text:
+            messagebox.showerror(
+                "Invalid quantity",
+                "Please enter a quantity."
+            )
+            return
+
+        try:
+            quantity = int(quantity_text)
+        except ValueError:
+            messagebox.showerror(
+                "Invalid quantity",
+                "Quantity must be a whole number."
+            )
+            return
+
+        if quantity <= 0:
+            messagebox.showerror(
+                "Invalid quantity",
+                "Quantity must be greater than 0."
+            )
+            return
+
+        note = note_entry.get().strip()
+
+        success, message = movements.record_movement(
+            product_name=product_name,
+            movement_type=movement,
+            quantity=quantity,
+            note=note
+        )
+
+        if success:
+            messagebox.showinfo(
+                "Movement recorded",
+                message
+            )
+            self.show_page("Movements")
+        else:
+            messagebox.showerror(
+                "Movement not recorded",
+                message
+            )
+        
+    def show_dashboard(self):
+        # =========================
+        # DASHBOARD HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(fill="x", padx=30, pady=(30, 20))
+
+        title = ttk.Label(
+            header,
+            text="Dashboard",
+            font=("Segoe UI", 24, "bold")
+        )
+        title.pack(anchor="w")
+
+        subtitle = ttk.Label(
+            header,
+            text="Inventory overview",
+            font=("Segoe UI", 11)
+        )
+        subtitle.pack(anchor="w", pady=(5, 0))
+
+        # =========================
+        # GET DATA
+        # =========================
+        product_list = products.list_products()
+        low_stock = products.low_stock_alert()
+        expiring = goods_in.expiring_soon()
+        recent_movements = movements.movement_history(limit=5)
+
+        total_products = len(product_list)
+        total_stock = sum(product["stock"] for product in product_list)
+
+        # =========================
+        # KPI CARDS
+        # =========================
+        cards = ttk.Frame(self.content)
+        cards.pack(fill="x", padx=30, pady=10)
+
+        self.create_card(
+            cards,
+            "PRODUCTS",
+            total_products,
+            0
+        )
+
+        self.create_card(
+            cards,
+            "TOTAL STOCK",
+            total_stock,
+            1
+        )
+
+        self.create_card(
+            cards,
+            "LOW STOCK",
+            len(low_stock),
+            2
+        )
+
+        self.create_card(
+            cards,
+            "EXPIRING SOON",
+            len(expiring),
+            3
+        )
+
+        # =========================
+        # RECENT MOVEMENTS
+        # =========================
+        movements_frame = ttk.LabelFrame(
+            self.content,
+            text="Recent Movements"
+        )
+        movements_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(20, 30)
+        )
+
+        columns = (
+            "product",
+            "type",
+            "quantity",
+            "note",
+            "timestamp"
+        )
+
+        tree = ttk.Treeview(
+            movements_frame,
+            columns=columns,
+            show="headings"
+        )
+
+        tree.heading("product", text="Product")
+        tree.heading("type", text="Type")
+        tree.heading("quantity", text="Quantity")
+        tree.heading("note", text="Note")
+        tree.heading("timestamp", text="Date")
+
+        tree.column("product", width=180)
+        tree.column("type", width=100)
+        tree.column("quantity", width=100)
+        tree.column("note", width=250)
+        tree.column("timestamp", width=180)
+
+        for movement in recent_movements:
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    movement["name"],
+                    movement["movement_type"],
+                    movement["quantity"],
+                    movement["note"],
+                    movement["timestamp"]
+                )
+            )
+
+        tree.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        )
+
+    def create_card(self, parent, label, value, column):
+        card = ttk.Frame(
+            parent,
+            relief="solid",
+            borderwidth=1
+        )
+
+        card.grid(
+            row=0,
+            column=column,
+            padx=5,
+            sticky="nsew"
+        )
+
+        parent.columnconfigure(column, weight=1)
+
+        label_widget = ttk.Label(
+            card,
+            text=label,
+            font=("Segoe UI", 10, "bold")
+        )
+        label_widget.pack(
+            anchor="w",
+            padx=15,
+            pady=(15, 5)
+        )
+
+        value_widget = ttk.Label(
+            card,
+            text=str(value),
+            font=("Segoe UI", 22, "bold")
+        )
+        value_widget.pack(
+            anchor="w",
+            padx=15,
+            pady=(0, 15)
+        )
 
 
 if __name__ == "__main__":
