@@ -2042,29 +2042,29 @@ class InventoryApp(tk.Tk):
             cards,
             "PRODUCTS",
             total_products,
-            0
-        )
+            0)
+        
 
         self.create_card(
             cards,
             "TOTAL STOCK",
             total_stock,
-            1
-        )
+            1)
+        
 
         self.create_card(
             cards,
             "LOW STOCK",
             len(low_stock),
-            2
-        )
+            2)
+        
 
         self.create_card(
             cards,
             "EXPIRING SOON",
             len(expiring),
-            3
-        )
+            3)
+        
 
         # =========================
         # RECENT MOVEMENTS
@@ -2130,7 +2130,7 @@ class InventoryApp(tk.Tk):
         card = ttk.Frame(
             parent,
             relief="solid",
-            borderwidth=1
+            borderwidth=1,
         )
 
         card.grid(
