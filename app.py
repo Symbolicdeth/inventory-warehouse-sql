@@ -5,10 +5,10 @@ from datetime import datetime
 import products
 import movements
 import goods_in
+import reports
 import products
 import movements
 import goods_in
-
 
 class InventoryApp(tk.Tk):
     def __init__(self):
@@ -91,6 +91,12 @@ class InventoryApp(tk.Tk):
             
         elif page_name == "Movements":
             self.show_movements()
+        
+        elif page_name == "Alerts":
+            self.show_alerts()
+        
+        elif page_name == "Reports":
+            self.show_reports()        
 
         else:
             title = ttk.Label(
@@ -1307,7 +1313,51 @@ class InventoryApp(tk.Tk):
         ).pack(
             side="right"
         )
+        # =========================
+        # HISTORY FILTERS
+        # =========================
+        filter_frame = ttk.Frame(self.content)
+        filter_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 10)
+        )
 
+        ttk.Label(
+            filter_frame,
+            text="Type:"
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        movement_filter = ttk.Combobox(
+            filter_frame,
+            state="readonly",
+            values=("All", "IN", "OUT"),
+            width=10
+        )
+        movement_filter.set("All")
+        movement_filter.pack(
+            side="left",
+            padx=(0, 25)
+        )
+
+        ttk.Label(
+            filter_frame,
+            text="Search product:"
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        search_entry = ttk.Entry(
+            filter_frame,
+            width=30
+        )
+        search_entry.pack(
+            side="left"
+        )
         # =========================
         # HISTORY
         # =========================
@@ -1393,19 +1443,48 @@ class InventoryApp(tk.Tk):
         # =========================
         # LOAD HISTORY
         # =========================
-        for row in movements.movement_history(limit=100):
-            self.movements_tree.insert(
-                "",
-                "end",
-                values=(
-                    row["name"],
-                    row["movement_type"],
-                    row["quantity"],
-                    row["note"] or "",
-                    row["timestamp"]
-                )
-            )
+        def refresh_movement_history(*args):
+            for item in self.movements_tree.get_children():
+                self.movements_tree.delete(item)
 
+            selected_type = movement_filter.get()
+            search_text = search_entry.get().strip().lower()
+
+            for row in movements.movement_history(limit=100):
+                product_name = row["name"]
+                movement_type_value = row["movement_type"]
+
+                if selected_type != "All":
+                    if movement_type_value != selected_type:
+                        continue
+
+                if search_text:
+                    if search_text not in product_name.lower():
+                        continue
+
+                self.movements_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        product_name,
+                        movement_type_value,
+                        row["quantity"],
+                        row["note"] or "",
+                        row["timestamp"]
+                    )
+                )
+
+        movement_filter.bind(
+            "<<ComboboxSelected>>",
+            refresh_movement_history
+        )
+
+        search_entry.bind(
+            "<KeyRelease>",
+            refresh_movement_history
+        )
+
+        refresh_movement_history()
     def record_movement_clicked(
         self,
         product_entry,
@@ -1476,7 +1555,451 @@ class InventoryApp(tk.Tk):
                 "Movement not recorded",
                 message
             )
-        
+    def show_alerts(self):
+        # =========================
+        # HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(
+            fill="x",
+            padx=30,
+            pady=(30, 20)
+        )
+
+        ttk.Label(
+            header,
+            text="Alerts",
+            font=("Segoe UI", 24, "bold")
+        ).pack(anchor="w")
+
+        ttk.Label(
+            header,
+            text="Low stock and expiry alerts",
+            font=("Segoe UI", 11)
+        ).pack(
+            anchor="w",
+            pady=(5, 0)
+        )
+
+        # =========================
+        # GET DATA
+        # =========================
+        low_stock = products.low_stock_alert()
+        expiring = goods_in.expiring_soon()
+
+        # =========================
+        # LOW STOCK
+        # =========================
+        low_stock_frame = ttk.LabelFrame(
+            self.content,
+            text=f"Low Stock ({len(low_stock)})"
+        )
+        low_stock_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 15)
+        )
+
+        low_columns = (
+            "Product",
+            "Stock",
+            "Minimum",
+            "Unit"
+        )
+
+        low_tree = ttk.Treeview(
+            low_stock_frame,
+            columns=low_columns,
+            show="headings",
+            height=6
+        )
+
+        for column in low_columns:
+            low_tree.heading(
+                column,
+                text=column
+            )
+
+        low_tree.column(
+            "Product",
+            width=250
+        )
+        low_tree.column(
+            "Stock",
+            width=100,
+            anchor="center"
+        )
+        low_tree.column(
+            "Minimum",
+            width=100,
+            anchor="center"
+        )
+        low_tree.column(
+            "Unit",
+            width=150
+        )
+
+        for row in low_stock:
+            low_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["name"],
+                    row["stock"],
+                    row["min_stock"],
+                    row["unit"]
+                )
+            )
+
+        low_tree.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        )
+
+        # =========================
+        # EXPIRING SOON
+        # =========================
+        expiring_frame = ttk.LabelFrame(
+            self.content,
+            text=f"Expiring Soon ({len(expiring)})"
+        )
+        expiring_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(0, 30)
+        )
+
+        exp_columns = (
+            "Product",
+            "Quantity",
+            "Batch/Lot",
+            "Expiry Date"
+        )
+
+        exp_tree = ttk.Treeview(
+            expiring_frame,
+            columns=exp_columns,
+            show="headings",
+            height=6
+        )
+
+        for column in exp_columns:
+            exp_tree.heading(
+                column,
+                text=column
+            )
+
+        exp_tree.column(
+            "Product",
+            width=250
+        )
+        exp_tree.column(
+            "Quantity",
+            width=100,
+            anchor="center"
+        )
+        exp_tree.column(
+            "Batch/Lot",
+            width=180
+        )
+        exp_tree.column(
+            "Expiry Date",
+            width=150,
+            anchor="center"
+        )
+
+        for row in expiring:
+            exp_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["name"],
+                    row["quantity"],
+                    row["batch_lot"] or "",
+                    row["expiry_date"]
+                )
+            )
+
+        exp_tree.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        ) 
+    def show_reports(self):
+        # =========================
+        # HEADER
+        # =========================
+        header = ttk.Frame(self.content)
+        header.pack(
+            fill="x",
+            padx=30,
+            pady=(30, 20)
+        )
+
+        ttk.Label(
+            header,
+            text="Reports",
+            font=("Segoe UI", 24, "bold")
+        ).pack(anchor="w")
+
+        ttk.Label(
+            header,
+            text="Inventory and movement reports",
+            font=("Segoe UI", 11)
+        ).pack(
+            anchor="w",
+            pady=(5, 0)
+        )
+
+        # =========================
+        # GET DATA
+        # =========================
+        product_list = products.list_products()
+        avg_stock = reports.average_stock()
+        movement_summary = reports.movement_summary()
+        category_data = reports.total_stock_value_by_category()
+        product_totals = reports.movement_totals_by_product()
+
+        # =========================
+        # KPI CARDS
+        # =========================
+        cards = ttk.Frame(self.content)
+        cards.pack(
+            fill="x",
+            padx=30,
+            pady=10
+        )
+
+        self.create_card(
+            cards,
+            "PRODUCTS",
+            len(product_list),
+            0
+        )
+
+        self.create_card(
+            cards,
+            "AVERAGE STOCK",
+            round(avg_stock or 0, 1),
+            1
+        )
+
+        self.create_card(
+            cards,
+            "TOTAL MOVEMENTS",
+            movement_summary["total_movements"] or 0,
+            2
+        )
+
+        self.create_card(
+            cards,
+            "IN / OUT",
+            f"{movement_summary['in_movements'] or 0} / "
+            f"{movement_summary['out_movements'] or 0}",
+            3
+        )
+
+        # =========================
+        # STOCK BY CATEGORY
+        # =========================
+        category_frame = ttk.LabelFrame(
+            self.content,
+            text="Stock by Category"
+        )
+        category_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(15, 10)
+        )
+
+        category_columns = (
+            "Category",
+            "Total Units",
+            "Products"
+        )
+
+        category_tree = ttk.Treeview(
+            category_frame,
+            columns=category_columns,
+            show="headings",
+            height=5
+        )
+
+        for column in category_columns:
+            category_tree.heading(
+                column,
+                text=column
+            )
+
+        category_tree.column(
+            "Category",
+            width=250
+        )
+        category_tree.column(
+            "Total Units",
+            width=150,
+            anchor="center"
+        )
+        category_tree.column(
+            "Products",
+            width=150,
+            anchor="center"
+        )
+
+        for row in category_data:
+            category_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["category"],
+                    row["total_units"],
+                    row["num_products"]
+                )
+            )
+
+        category_tree.pack(
+            fill="x",
+            padx=10,
+            pady=10
+        )
+
+        # =========================
+        # MOVEMENT SUMMARY
+        # =========================
+        summary_frame = ttk.LabelFrame(
+            self.content,
+            text="Movement Summary"
+        )
+        summary_frame.pack(
+            fill="x",
+            padx=30,
+            pady=10
+        )
+
+        summary_columns = (
+            "IN Movements",
+            "OUT Movements",
+            "Total IN",
+            "Total OUT"
+        )
+
+        summary_tree = ttk.Treeview(
+            summary_frame,
+            columns=summary_columns,
+            show="headings",
+            height=2
+        )
+
+        for column in summary_columns:
+            summary_tree.heading(
+                column,
+                text=column
+            )
+            summary_tree.column(
+                column,
+                width=180,
+                anchor="center"
+            )
+
+        summary_tree.insert(
+            "",
+            "end",
+            values=(
+                movement_summary["in_movements"] or 0,
+                movement_summary["out_movements"] or 0,
+                movement_summary["total_in"] or 0,
+                movement_summary["total_out"] or 0
+            )
+        )
+
+        summary_tree.pack(
+            fill="x",
+            padx=10,
+            pady=10
+        )
+
+        # =========================
+        # MOVEMENT TOTALS
+        # =========================
+        totals_frame = ttk.LabelFrame(
+            self.content,
+            text="Movement Totals by Product"
+        )
+        totals_frame.pack(
+            fill="both",
+            expand=True,
+            padx=30,
+            pady=(10, 30)
+        )
+
+        totals_columns = (
+            "Product",
+            "Category",
+            "Total IN",
+            "Total OUT",
+            "Movements"
+        )
+
+        totals_tree = ttk.Treeview(
+            totals_frame,
+            columns=totals_columns,
+            show="headings"
+        )
+
+        for column in totals_columns:
+            totals_tree.heading(
+                column,
+                text=column
+            )
+
+        totals_tree.column(
+            "Product",
+            width=200
+        )
+        totals_tree.column(
+            "Category",
+            width=150
+        )
+        totals_tree.column(
+            "Total IN",
+            width=120,
+            anchor="center"
+        )
+        totals_tree.column(
+            "Total OUT",
+            width=120,
+            anchor="center"
+        )
+        totals_tree.column(
+            "Movements",
+            width=120,
+            anchor="center"
+        )
+
+        for row in product_totals:
+            totals_tree.insert(
+                "",
+                "end",
+                values=(
+                    row["name"],
+                    row["category"],
+                    row["total_in"] or 0,
+                    row["total_out"] or 0,
+                    row["total_movements"] or 0
+                )
+            )
+
+        totals_tree.pack(
+            fill="both",
+            expand=True,
+            padx=10,
+            pady=10
+        )       
     def show_dashboard(self):
         # =========================
         # DASHBOARD HEADER

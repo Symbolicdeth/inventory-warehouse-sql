@@ -125,24 +125,50 @@ def movement_history(product_name=None, limit=20):
     Usa un JOIN para mostrar el nombre del producto en lugar de solo el ID.
     """
     conn = get_connection()
-    if product_name:
-        query = """
-            SELECT m.id, p.name, m.movement_type, m.quantity, m.note, m.timestamp
-            FROM movements m
-            JOIN products p ON m.product_id = p.id
-            WHERE p.name = ?
-            ORDER BY m.timestamp DESC
-            LIMIT ?
-        """
-        rows = conn.execute(query, (product_name, limit)).fetchall()
-    else:
-        query = """
-            SELECT m.id, p.name, m.movement_type, m.quantity, m.note, m.timestamp
-            FROM movements m
-            JOIN products p ON m.product_id = p.id
-            ORDER BY m.timestamp DESC, m.id DESC
-            LIMIT ?
-        """
-        rows = conn.execute(query, (limit,)).fetchall()
-    conn.close()
-    return rows
+
+    try:
+        if product_name:
+            query = """
+                SELECT
+                    m.id,
+                    p.name,
+                    m.movement_type,
+                    m.quantity,
+                    m.note,
+                    m.timestamp
+                FROM movements m
+                JOIN products p ON m.product_id = p.id
+                WHERE p.name = ?
+                ORDER BY m.timestamp DESC, m.id DESC
+                LIMIT ?
+            """
+
+            rows = conn.execute(
+                query,
+                (product_name, limit)
+            ).fetchall()
+
+        else:
+            query = """
+                SELECT
+                    m.id,
+                    p.name,
+                    m.movement_type,
+                    m.quantity,
+                    m.note,
+                    m.timestamp
+                FROM movements m
+                JOIN products p ON m.product_id = p.id
+                ORDER BY m.timestamp DESC, m.id DESC
+                LIMIT ?
+            """
+
+            rows = conn.execute(
+                query,
+                (limit,)
+            ).fetchall()
+
+        return rows
+
+    finally:
+        conn.close()
